@@ -14,6 +14,10 @@ class _ChatScreenState extends State<ChatScreen> {
   List<Map<String, String>> messages = [];
   TextEditingController controller = TextEditingController();
 
+  // Sohbet geçmişi
+  List<List<Map<String, String>>> chatHistory = [];
+  int? _activeHistoryIndex; // null: aktif sohbet, 0+: geçmiş sohbet
+
   // Admin Paneli için değişkenler
   File? _selectedFile;
   bool _isUploading = false;
@@ -41,6 +45,45 @@ class _ChatScreenState extends State<ChatScreen> {
         messages.add({'sender': 'bot', 'text': 'Hata oluştu.'});
       });
     }
+  }
+
+  // Yeni sohbet başlatma
+  void _startNewChat() {
+    setState(() {
+      // Sadece aktif sohbetteyken ve mesajlar boş değilse geçmişe ekle
+      if (_activeHistoryIndex == null && messages.isNotEmpty) {
+        chatHistory.insert(0, List<Map<String, String>>.from(messages));
+      }
+      messages.clear();
+      controller.clear();
+      _activeHistoryIndex = null;
+    });
+    Navigator.pop(context); // Drawer'ı kapat
+  }
+
+  // Geçmiş sohbeti yükle
+  void _loadHistoryChat(int index) {
+    setState(() {
+      messages = List<Map<String, String>>.from(chatHistory[index]);
+      _activeHistoryIndex = index;
+    });
+    Navigator.pop(context);
+  }
+
+  // Geçmiş sohbeti sil
+  void _deleteHistoryChat(int index) {
+    setState(() {
+      chatHistory.removeAt(index);
+      // Eğer silinen sohbet aktifse, aktif sohbeti temizle
+      if (_activeHistoryIndex == index) {
+        messages.clear();
+        controller.clear();
+        _activeHistoryIndex = null;
+      } else if (_activeHistoryIndex != null && _activeHistoryIndex! > index) {
+        // Silinen sohbet aktif sohbetten önceyse, aktif sohbet indeksini güncelle
+        _activeHistoryIndex = _activeHistoryIndex! - 1;
+      }
+    });
   }
 
   // Excel dosyası seçme (mobil ve web için farklı olabilir)
@@ -170,14 +213,43 @@ class _ChatScreenState extends State<ChatScreen> {
             ListTile(
               leading: Icon(Icons.chat),
               title: Text('Sohbet'),
-              selected: _selectedIndex == 0,
+              selected: _selectedIndex == 0 && _activeHistoryIndex == null,
               onTap: () {
                 setState(() {
+                  // Her zaman yeni boş sohbet başlat
+                  if (_activeHistoryIndex == null && messages.isNotEmpty) {
+                    chatHistory.insert(0, List<Map<String, String>>.from(messages));
+                  }
+                  messages.clear();
+                  controller.clear();
                   _selectedIndex = 0;
+                  _activeHistoryIndex = null;
                 });
                 Navigator.pop(context);
               },
             ),
+            ListTile(
+              leading: Icon(Icons.add_circle_outline),
+              title: Text('Yeni Sohbet'),
+              onTap: _startNewChat,
+            ),
+            if (chatHistory.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text('Geçmiş Sohbetler', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+              ...List.generate(chatHistory.length, (i) => ListTile(
+                leading: Icon(Icons.history),
+                title: Text('Sohbet ${chatHistory.length - i}'),
+                selected: _activeHistoryIndex == i,
+                trailing: IconButton(
+                  icon: Icon(Icons.delete, color: Colors.red),
+                  onPressed: () => _deleteHistoryChat(i),
+                ),
+                onTap: () => _loadHistoryChat(i),
+              )),
+              Divider(),
+            ],
             ListTile(
               leading: Icon(Icons.admin_panel_settings),
               title: Text('Admin Paneli'),
